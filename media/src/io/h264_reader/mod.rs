@@ -129,8 +129,8 @@ impl NAL {
     }
 }
 
-const NAL_PREFIX_3BYTES: [u8; 3] = [0, 0, 1];
-const NAL_PREFIX_4BYTES: [u8; 4] = [0, 0, 0, 1];
+pub const NAL_PREFIX_3BYTES: [u8; 3] = [0, 0, 1];
+pub const NAL_PREFIX_4BYTES: [u8; 4] = [0, 0, 0, 1];
 
 /// Wrapper class around reading buffer
 struct ReadBuffer {
