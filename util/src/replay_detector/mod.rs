@@ -129,6 +129,7 @@ impl ReplayDetector for WrappedSlidingWindowDetector {
 
         if diff >= self.window_size as i64 {
             // Too old.
+            log::warn!("Dropping received RTP packet which was too old: {} oldness: {}", seq, diff);
             return false;
         }
         if diff >= 0 && self.mask.bit(diff as usize) != 0 {
