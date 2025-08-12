@@ -6,6 +6,7 @@ use super::track_local_static_rtp::TrackLocalStaticRTP;
 use super::*;
 use crate::error::flatten_errs;
 use crate::track::RTP_OUTBOUND_MTU;
+use crate::rtp::packet::Packet;
 
 #[derive(Debug, Clone)]
 struct TrackLocalStaticSampleInternal {
@@ -68,7 +69,7 @@ impl TrackLocalStaticSample {
     /// If one PeerConnection fails the packets will still be sent to
     /// all PeerConnections. The error message will contain the ID of the failed
     /// PeerConnections so you can remove them
-    pub async fn write_sample(&self, sample: &Sample) -> Result<()> {
+    pub async fn write_sample(&self, sample: &Sample) -> Result<Vec<Packet>> {
         self.write_sample_with_extensions(sample, &[]).await
     }
 
@@ -81,11 +82,11 @@ impl TrackLocalStaticSample {
         &self,
         sample: &Sample,
         extensions: &[rtp::extension::HeaderExtension],
-    ) -> Result<()> {
+    ) -> Result<Vec<Packet>> {
         let mut internal = self.internal.lock().await;
 
         if internal.packetizer.is_none() || internal.sequencer.is_none() {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let (any_paused, all_paused) = (
@@ -95,7 +96,7 @@ impl TrackLocalStaticSample {
 
         if all_paused {
             // Abort already here to not increment sequence numbers.
-            return Ok(());
+            return Ok(vec![]);
         }
 
         if any_paused {
@@ -144,7 +145,7 @@ impl TrackLocalStaticSample {
         };
 
         let mut write_errs = vec![];
-        for p in packets {
+        for p in packets.iter() {
             if let Err(err) = self
                 .rtp_track
                 .write_rtp_with_extensions(&p, extensions)
@@ -154,7 +155,11 @@ impl TrackLocalStaticSample {
             }
         }
 
-        flatten_errs(write_errs)
+        if let Err(err) = flatten_errs(write_errs) {
+            Err(err)
+        } else {
+            Ok(packets)
+        }
     }
 
     /// Create a builder for writing samples with additional data.
@@ -266,6 +271,7 @@ mod sample_writer {
     use rtp::extension::audio_level_extension::AudioLevelExtension;
     use rtp::extension::video_orientation_extension::VideoOrientationExtension;
     use rtp::extension::HeaderExtension;
+    use rtp::packet::Packet;
 
     use super::TrackLocalStaticSample;
     use crate::error::Result;
@@ -313,7 +319,7 @@ mod sample_writer {
         ///
         /// Creates one or more RTP packets with any extensions specified for each packet and sends
         /// them.
-        pub async fn write_sample(self, sample: &Sample) -> Result<()> {
+        pub async fn write_sample(self, sample: &Sample) -> Result<Vec<Packet>> {
             self.track
                 .write_sample_with_extensions(sample, &self.extensions)
                 .await
